@@ -1,0 +1,400 @@
+######################## Esame 28/01/2019 ################################
+# Nome: MARCO
+# Cognome: SPIGA
+# Matricola: SE/99/00395
+# CdL:
+#########################################################################
+
+####### 1 #######
+
+### Importo le librerie di base
+library("ggplot2") # plotting
+library(MASS) # lda, qda
+library(class) # knn
+library(boot)
+library(leaps)
+
+
+### Caricamento del daset
+mydforig <- read.csv("D:/spigama/Documenti/Dropbox/Marco-Mattia/Studio Universitario/04 - Metodi Statistici Data Science/03 - Esercitazione/00 ESAME Gennaio/cesario.csv", sep =",")
+
+#mydforig <- read.csv("C:/Users/Marco/Dropbox/Marco-Mattia/Studio Universitario/04 - Metodi Statistici Data Science/03 - Esercitazione/00 ESAME Gennaio/cesario.csv", sep =",")
+
+mydforig <- read.csv("/Users/mattiaspiga/Dropbox/Marco-Mattia/Studio Universitario/04 - Metodi Statistici Data Science/03 - Esercitazione/00 ESAME Gennaio/cesario.csv", sep =",")
+
+
+# Visualizzo il data set e faccio una ANALISI ESPLORATIVA con le funzioni base
+# noto che il data set ha una dimensione ridotta
+# ci sono 80 osservazioni e 6 predittori + una variabile di risposta (Caesarian)
+# Le osservazioni riguardano 80 parti di donne, in cui si analizzano alcuni dati sanitari fondamentali
+# e probailmente correlabili alla fine di valutare la necessit? di un taglio cesario
+# Osservo che la variabile Caesarian 
+
+# Numero dei casi e delle variabili
+dim(mydforig)
+
+# Visualizza il dataset
+View(mydforig)
+
+# Le prime osservazioni del Dataset
+head(mydforig)
+
+# Struttura e classi del Dataset
+str(mydforig)
+
+# Osservazione generale
+summary(mydforig)
+
+
+# faccio una copia di mydf Origine al fine di preservarlo dalle successive modifiche
+# il data set ha anche dimensioni ridotte pertanto un duplicato non ha un particolare onere di memorizzazione
+mydf = mydforig
+
+# Rivedo alcune variabili per ridefinire in modo qualitativo
+
+### Verifica degli NA
+# non ci sono na nel data set
+sum(is.na(mydforig))
+#sum(is.na(mydforig$HDI_for_year))
+
+
+
+# Rimuovo la variabile id, essendo un progressivo potrebbe distorcere le valutazioni
+# mydf = mydf[, -which(colnames(mydf)=="id")]
+
+#1 Lascio Age, osservo una mediana a 27 anni
+# non osservo valori anomali
+quantile(mydf$Age)
+
+#2. Delivery number (motivo del parto):
+mydf$Delivery_number = factor(mydf$Delivery_number)
+levels(mydf$Delivery_number) = c("Minaccia Immediata", "Compromessa, senza pericolo", "Nessuna condizione, ma prematuro", "Programmato")
+
+
+# 3. Delivery time (parto): {0 = Nato a termine, 1 = Nato prematuro, 2 = Nato post-termine}
+mydf$Delivery_time = factor(mydf$Delivery_time)
+levels(mydf$Delivery_time) = c("Nato a termine", "Nato prematuro", "Nato post-termine")
+
+
+# 4. Blood Pressure (pressione del sangue): {0 = Bassa, 1 = Normale, 2 = Alta}
+mydf$Blood_Pressure = factor(mydf$Blood_Pressure)
+levels(mydf$Blood_Pressure) = c("Bassa", "Normale", "Alta")
+
+
+# 5. Heart Problem (problemi al cuore): {0 = No, 1 = S?}
+mydf$Heart_Problem = factor(mydf$Heart_Problem)
+levels(mydf$Heart_Problem) = c("No", "Si")
+
+
+
+# 6. Caesarian (parto con taglio cesario): {0 = No, 1 = S?}
+mydf$Caesarian = factor(mydf$Caesarian)
+levels(mydf$Caesarian) = c("No", "Si")
+
+
+# verifico di aver esseguito correttamente tutte le trasformazioni
+summary(mydf)
+
+
+### Analisi esplorativa mediante grafici
+
+# Analizzo Age
+plot(mydf$Age)
+hist(mydf$Age)
+barplot(mydf$Age)
+
+# Analiziamo con pairs il rapporco con tutte le variabili a coppie
+pairs(mydf, main="Matrice degli scatterplot", col="blue")
+
+# Essendo Caesarian una variabile categoria, esploro la relazione mediante un Boxplot
+# si osservano così le relazioni con Age.
+boxplot(Age~Caesarian, data = mydf,
+        horizontal=TRUE,
+        xlab="Et? della donna",
+        col=c("thistle","wheat"),
+        main="Cesario in riferimento all'Et? della donna")
+
+
+# grafico per trovare una correlazione nei dati
+ggplot2::ggplot(mydf, aes(x = Delivery_time, y = Age, colour = Caesarian, shape = Heart_Problem)) +
+  geom_point() +
+  labs(x = "Motivo del Parto", y = "Et?") + 
+  ggtitle("Motivo del parto in funzione dell'et?")
+
+
+
+# grafico per trovare una correlazione nei dati
+ggplot2::ggplot(mydf, aes(x = Heart_Problem, y = Age, colour = Caesarian)) +
+  geom_point() +
+  labs(x = "Problemi al cuore", y = "Età") + 
+  ggtitle("Motivo del parto in funzione dell'et?")
+
+
+      
+# Grafici per l'analisi esplorativa visiva
+
+ggplot2::ggplot(data = mydf) + 
+  geom_density(  mapping= aes(x=Age), alpha=0.3, fill="Red") + xlab("Age") + ylab("Densit?") + ggtitle("Grafico di densit? per l'et? delle puerpere")
+  
+
+
+# Grafico di suddivisione delle donne per Quantili
+group = cut(mydf$Age, breaks = quantile(mydf$Age))
+somma = as.data.frame(group)
+somma[,"conta"] = 1
+suddivisione = as.data.frame(aggregate(conta ~ group, data = somma, sum))  
+ggplot(suddivisione, aes(x="", y=suddivisione$conta, fill=suddivisione$group)) + geom_bar(width = 1, alpha = 0.7, stat = "identity") + coord_polar("y", start=0) + ggtitle("Suddivisione delle donne per gruppi di et?")
+
+
+# L'et? media delle donne che hanno avuto un cesareo ? superiore
+#
+ggplot2::ggplot(data = mydf ) +
+  stat_summary( mapping = aes(x = Caesarian, y = Age, fill = Caesarian), fun.y = mean, geom = "bar",
+                colour = "black") +
+  xlab("Ceario") + ylab("Media delle medie delle donne") +
+  ggtitle("Et? media delle donne che hanno avuto un cesario")
+
+
+#oltre il 50% delle donne hanno censite avevano un delivery number con "minaccia immediata"
+# vediamo se c'? una correlazione con il cesario
+# Si pu? notare che pi? aumenta la minaccia per la donna/feto e pi? aumenta la probabilit? di un cesario
+ggplot( data = mydf)  + geom_bar( mapping = aes( x = Delivery_number, fill = Caesarian))  + 
+  xlab("Motivo del parto") + ylab("Numero di parti suddivisi per cesario si/no") +
+  ggtitle("Motivo del parto e relazione sul cesario")
+
+
+
+# Come al cresce dell'et? della donna aumentino i casi sdi problemi cardiaci e di cesario?
+ggplot(mydf, aes(x = reorder(id, Age), y = Age, colour = Caesarian, shape = Heart_Problem)) +
+  geom_point() +
+  labs(x = "Id", y = "Et?") + 
+  ggtitle("Et? delle donne cesario e problemi cardiaci")
+
+# Se si ha la pressione normale il rischio di avere problemi al cuore si riduce di un terzo
+table(mydf$Blood_Pressure, mydf$Heart_Problem)
+
+
+
+
+####### 2 #######
+#
+# Sviluppare adeguati  modelli previsionali, utilizzando come variabile di risposta Caesarian. Commentare 
+# i modelli che si ? sviluppato, motivando quello ritenuto migliore (considerando sia l'aspetto predittivo, 
+# sia quello inferenziale)
+# 
+
+#
+# Si tratta anzitutto di un problema di classificazione. Infatti Caesarian ? una variabile qualitativa 
+# che pu? assumere due valori, vero o falso. Data la condizione binaria, il primo modello testabile ? 
+# una regressione logistica
+
+# Rimuovo una variabile ID in quanto non utile all'elaborazione
+mydf = mydf[, -which(colnames(mydf)=="id")]
+
+
+# per realizzare il modello distinguo tra training set e test set
+# con il data set preparo il modello 
+# con il test set ne valuto l'accuratezza
+# il numero delle osservazioni ? abbastanza contenuto, potrebbe essere un problema applicando la logistica
+set.seed(1)
+nperc = 0.8
+training.samples = sample(1:nrow(mydf), nperc * nrow(mydf), replace = F)
+
+# costruisco il modello con tutte i predittori presenti del data set tranne id
+# ho rimosso il Delivery_number perch? da dei valori anomali sulla deviazione standard
+# il quantile dei residui sono abbastanza centrati sullo zero, senza code anomale
+mod_logistica <- glm(Caesarian ~  Delivery_time +  Heart_Problem, data = mydf, family = "binomial",  subset = training.samples)
+
+
+
+summary(mod_logistica)
+plot(mod_logistica)
+
+
+
+
+# eseguo la verifica di accuratezza con il test set
+pred_logistica = predict(mod_logistica, mydf[-training.samples,], type="response" )
+
+
+pred = rep("No", length(pred_logistica) )
+# soglia di probabilit?
+soglia = 0.5
+pred[pred_logistica > soglia] = "Si"
+
+
+# matrice di confusione
+table(pred, mydf[-training.samples, which(colnames(mydf)=="Caesarian")])
+
+
+# il sistema riesce ad individuare il 68% dei casi
+mean(pred == mydf[-training.samples, which(colnames(mydf)=="Caesarian")])
+
+# il tasso di errore a livello globale ? pari al 31%
+1 - mean(pred == mydf[-training.samples, which(colnames(mydf)=="Caesarian")])
+
+
+### Proviamo un modello con tutte le variabili 
+
+mod_logisticaALL <- glm(Caesarian~., data = mydf, family = "binomial",  subset = training.samples)
+
+# eseguo la verifica di accuratezza con il test set
+pred_logisticaALL = predict(mod_logisticaALL, mydf[-training.samples,], type="response" )
+predALL = rep("No", length(pred_logisticaALL) )
+# soglia di probabilit?
+sogliaALL = 0.5
+predALL[pred_logisticaALL > sogliaALL] = "Si"
+
+
+# matrice di confusione
+table(predALL, mydf[-training.samples, which(colnames(mydf)=="Caesarian")])
+
+
+# il sistema riesce ad individuare il 68% dei casi
+mean(predALL == mydf[-training.samples, which(colnames(mydf)=="Caesarian")])
+
+
+
+#### LDA ####
+
+# provo a verificare con la linear discriminant analysis
+# i risultati dovrebbero essere migliori
+# lda funziona meglio della logistica se si hanno pochi dati, ma si deve ipotizzare una distribuzione normale
+
+mod_lda <- lda(Caesarian ~ Heart_Problem, data = mydf, subset = training.samples )
+
+# FARE LA Receiver Operating Characteristics (ROC)
+
+summary(mod_lda)
+plot(mod_lda)
+
+# faccio la predizione sul test set e valuto l'accuratezza
+pred_lda = predict(mod_lda, mydf[-training.samples,] )
+
+# i risultati che ottengo si avvicinano molto a quelli ottenuti con la logistica
+table(pred_lda$class, mydf[-training.samples,  which(colnames(mydf)=="Caesarian")])
+
+mean(pred_lda$class == mydf[-training.samples, which(colnames(mydf)=="Caesarian")])
+(1 - mean(pred_lda$class ==  mydf[-training.samples,  which(colnames(mydf)=="Caesarian")] ))*100 #tasso di err. clas.
+
+
+### Plot ROC - Almassimo sino a 2 classificatori
+library(ROCR)
+# choose the posterior probability column carefully, it may be 
+# lda.pred$posterior[,1] or lda.pred$posterior[,1], depending on your factor levels 
+pred <- prediction(pred_lda$posterior[,2], mydf[-training.samples,]$Caesarian) 
+perf <- performance(pred,"tpr","fpr")
+plot(perf,colorize=TRUE)
+
+
+
+# i due precedenti modelli non si sono distinti significativamente
+# pertanto utilizziamo qda
+
+mod_qda <- qda(Caesarian ~ Delivery_time +  Heart_Problem, data = mydf, subset = training.samples )
+
+summary(mod_qda)
+
+
+# faccio la predizione sul test set e valuto l'accuratezza
+pred_qda = predict(mod_qda, mydf[-training.samples,] )
+
+# i risultati che ottengo si avvicinano molto a quelli ottenuti con la logistica
+table(pred_qda$class, mydf$Caesarian[-training.samples])
+
+mean(pred_qda$class == mydf$Caesarian[-training.samples])
+(1 - mean(pred_qda$class ==  mydf$Caesarian[-training.samples] ))*100 #tasso di err. clas.
+
+
+####### 2 - DA RIVEDERE #######
+# Mostrare le performance dei modelli di previsione sviluppati 
+# (K=10, nel caso in cui si usi la K-fold Cross-Validation).
+
+
+# i due precedenti modelli non si sono distinti significativamente
+# verifichiamo con KNN
+
+train_knn = cbind(mydf$Delivery_time[training.samples], mydf$Heart_Problem[training.samples])
+test_knn = cbind(mydf$Delivery_time[-training.samples], mydf$Heart_Problem[-training.samples])
+
+knn_pred = knn(train_knn, test_knn, mydf$Caesarian[training.samples], k = 3)
+
+# Verifica accuratezza del modello
+mean(knn_pred == mydf$Caesarian[-training.samples])
+
+# Matrice di confusione
+table(knn_pred, mydf$Caesarian[-training.samples])
+
+
+
+####### 3 - Kfold CV #######
+
+### TODO interpretazione CV
+set.seed(13)
+
+# kfold = nrow(mydf)
+kfold = 10
+
+mod_logistica_CV <- glm(Caesarian ~  Delivery_time +  Heart_Problem, data = mydf, family = "binomial" )
+CV1 = cv.glm(mydf,mod_logistica_CV,K=kfold)
+
+mod_logistica_CV_1 <- glm(Caesarian ~., data = mydf, family = "binomial")
+CV2 = cv.glm(mydf,mod_logistica_CV_1,K=kfold)
+
+
+#delta	spiegazione
+# A vector of length two. The first component is the raw cross-validation estimate of prediction error. 
+# The second component is the adjusted cross-validation estimate. The adjustment is designed to compensate 
+# for the bias introduced by not using leave-one-out cross-validation.
+
+#Errore
+CV1$delta
+CV2$delta
+
+#Accuratezza
+1-CV1$delta
+1-CV2$delta
+
+####### 4 #######
+
+# Libreria per per richiamare la model selection
+library(leaps)
+
+subsets = regsubsets(Caesarian~., mydf)
+
+subsets.summary = summary(subsets) 
+
+reg.summary = summary(subsets.summary, matrix.logical=TRUE) 
+## Forced in e Forsed out, forza a far entrare o a non far entrare nel modello variabilei
+
+plot(subsets)
+reg.summary$rsq
+
+
+#Disegnamo 
+#quale è il modello che fa regisgtrare R^2 aggiustato piu alto?
+which.max(reg.summary$adjr2)
+
+#Modello 11, raficamente
+
+#scale= "Cp", "adjr2", "r2" or "bic"
+plot (subsets, scale="Cp")
+
+
+
+## Se è presente il quadrato nero, vuol dire che la variabile è nel modello, scale di grigio è la forza.
+plot(reg.summary$adjr2)
+#Restituisce la posizione fisica 
+which.min(reg.summary$cp)
+
+#Vediamo i coefficienti
+coef(regfit.full,6)
+
+#Le entrate al di fuori delle variabili, da usare per elaboarazioni
+reg.summary$which
+
+#Versione grafica del which
+reg.summary$outmat
+
+plot(regfit.full, scale="adjr2")
+
